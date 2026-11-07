@@ -194,12 +194,12 @@ function boldOf(f: FontSpec): FontSpec {
  */
 function statStack(g: Ctxt, items: MetricValue[], p: Px, align: LayerOpts['align']) {
   const { c, type } = g;
-  const UNIT = 0.36;
+  const UNIT = 1; // the unit matches the value's size
   const LABEL = 0.2;
   const unitFont = boldOf(type.number);
   const label = (m: MetricValue) => (type.upper ? m.label.toUpperCase() : m.label);
   // Smaller than the unit, but never below a readable size on a 1080px image.
-  const labelSize = (size: number) => Math.min(Math.max(size * LABEL, 17), size * UNIT * 0.85);
+  const labelSize = (size: number) => Math.min(Math.max(size * LABEL, 17), size * 0.5);
   const parts = (m: MetricValue, size: number) => {
     setFont(c, type.number, size);
     const value = c.measureText(m.value).width;
@@ -207,7 +207,7 @@ function statStack(g: Ctxt, items: MetricValue[], p: Px, align: LayerOpts['align
     const unit = m.unit ? c.measureText(m.unit.toUpperCase()).width : 0;
     setFont(c, type.label, labelSize(size));
     const lab = c.measureText(label(m)).width;
-    const gapUnit = m.unit ? size * 0.1 : 0;
+    const gapUnit = m.unit ? size * 0.18 : 0;
     const gapLabel = size * 0.16;
     return { value, unit, lab, gapUnit, gapLabel, total: value + gapUnit + unit + gapLabel + lab };
   };
@@ -228,7 +228,7 @@ function statStack(g: Ctxt, items: MetricValue[], p: Px, align: LayerOpts['align
     x += w.value + w.gapUnit;
     if (m.unit) {
       setFont(c, unitFont, size * UNIT);
-      haloText(g, m.unit.toUpperCase(), x, baseline, size * UNIT * 1.6);
+      haloText(g, m.unit.toUpperCase(), x, baseline, size * UNIT);
       x += w.unit;
     }
     x += w.gapLabel;
