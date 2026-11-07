@@ -80,7 +80,8 @@ export type MetricId =
 
 export type Rect = [x: number, y: number, w: number, h: number];
 export type Aspect = '9:16' | '4:5' | '1:1' | '16:9' | 'photo';
-export type StatsVariant = 'row' | 'column' | 'grid' | 'hero';
+export type StatsVariant = 'row' | 'column' | 'grid' | 'hero' | 'stack';
+export type Align = 'left' | 'center' | 'right';
 export type RouteColorBy = 'solid' | 'progress' | SeriesKey;
 export type BackgroundKind = 'solid' | 'gradient' | 'pattern' | 'photo' | 'transparent';
 export type PatternKind = 'contours' | 'ridges' | 'dots' | 'grain';
@@ -112,9 +113,11 @@ export interface Design {
   accent: string;
   paper: string; // the mat colour on templates with a frame
   font: string | null; // null = the template's own type
+  fontWeight: number | null; // null = each font's own default
   background: Background;
   metrics: MetricId[] | null; // null = sensible defaults for the sport
   statsVariant: StatsVariant | 'auto';
+  statsAlign: Align | 'auto';
   chartSeries: SeriesKey | 'auto';
   route: { width: number; colorBy: RouteColorBy; rotate: number; markers: boolean; glow: boolean };
   title: string | null; // null = the activity name

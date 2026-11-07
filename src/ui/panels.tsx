@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { BackgroundKind, MetricId, PatternKind, RouteColorBy, SeriesKey, StatsVariant } from '../types';
+import type { Align, BackgroundKind, MetricId, PatternKind, RouteColorBy, SeriesKey, StatsVariant } from '../types';
 import { ALL_METRICS, defaultMetrics, distanceIn, formatDate, formatDuration, METRICS, SPORT_LABEL } from '../lib/format';
-import { exportBlob, LAYER_NAMES, renderScene, resolveLayers, sceneSize, SERIES_LABEL, type ExportOptions } from '../render/engine';
-import { FONT_CHOICES } from '../render/fonts';
+import { exportBlob, LAYER_NAMES, renderScene, resolveType, resolveLayers, sceneSize, SERIES_LABEL, type ExportOptions } from '../render/engine';
+import { FONT_CHOICES, supportsWeight, WEIGHT_CHOICES } from '../render/fonts';
 import { GRADIENTS, PALETTES, TEMPLATES, withTemplate } from '../render/templates';
 import { currentActivity, useStudio } from '../state/store';
 import { Color, Field, Section, Segmented, Slider, Toggle } from './controls';
@@ -227,7 +227,10 @@ export function OverlayPanel() {
           </div>
         )}
         <Segmented<StatsVariant | 'auto'> label="Stats layout" value={design.statsVariant} onChange={(statsVariant) => edit({ statsVariant })}
-          options={[{ value: 'auto', label: 'Auto' }, { value: 'row', label: 'Row' }, { value: 'grid', label: 'Grid' }, { value: 'column', label: 'List' }, { value: 'hero', label: 'Hero' }]} />
+          options={[{ value: 'auto', label: 'Auto' }, { value: 'row', label: 'Row' }, { value: 'grid', label: 'Grid' }, { value: 'stack', label: 'Stack' }, { value: 'column', label: 'List' }, { value: 'hero', label: 'Hero' }]} />
+        <Segmented<Align | 'auto'> label="Stats alignment" value={design.statsAlign} onChange={(statsAlign) => edit({ statsAlign })}
+          options={[{ value: 'auto', label: 'Auto' }, { value: 'left', label: 'Left' }, { value: 'center', label: 'Centre' }, { value: 'right', label: 'Right' }]} />
+        {design.statsVariant === 'column' && <p className="hint">List keeps labels left and values right, so alignment does not apply.</p>}
       </Section>
 
       <Section title="Colour">
@@ -249,11 +252,16 @@ export function OverlayPanel() {
       <Section title="Type">
         <label className="field">
           <span>Typeface</span>
-          <select value={design.font ?? ''} onChange={(e) => edit({ font: e.target.value || null })}>
+          <select value={design.font ?? ''} onChange={(e) => edit({ font: e.target.value || null, fontWeight: null })}>
             <option value="">Template default</option>
-            {FONT_CHOICES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            {[...new Set(FONT_CHOICES.map((f) => f.group))].map((group) => (
+              <optgroup key={group} label={group}>
+                {FONT_CHOICES.filter((f) => f.group === group).map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
+        <WeightPicker />
       </Section>
 
       {hasRoute && (
@@ -292,6 +300,19 @@ export function OverlayPanel() {
         </ul>
       </Section>
     </>
+  );
+}
+
+/** Offers only weights the current fonts ship. Typefaces with a single weight get no control. */
+function WeightPicker() {
+  const design = useStudio((s) => s.design);
+  const edit = useStudio((s) => s.edit);
+  const type = resolveType({ ...design, fontWeight: null });
+  const options = WEIGHT_CHOICES.filter((o) => supportsWeight(type.display, o.value) || supportsWeight(type.number, o.value));
+  if (options.length < 2) return <p className="hint">No light or semibold weight for this typeface.</p>;
+  return (
+    <Segmented<number> label="Font weight" value={design.fontWeight ?? 0} onChange={(v) => edit({ fontWeight: v || null })}
+      options={[{ value: 0, label: 'Default' }, ...options]} />
   );
 }
 

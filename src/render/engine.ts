@@ -1,7 +1,7 @@
 import type { Activity, Aspect, Design, MetricId, Rect, SeriesKey, Split, Units } from '../types';
 import { defaultMetrics, distanceIn, formatDate, formatPace, metricValue, speedIn, SPORT_LABEL, type MetricValue } from '../lib/format';
 import { drawBackground } from './background';
-import { FONT_CHOICES, type FontSpec } from './fonts';
+import { FONT_CHOICES, supportsWeight, type FontSpec } from './fonts';
 import { templateById, type LayerOpts, type LayerType, type Shape, type TypeSet } from './templates';
 
 type Ctx = CanvasRenderingContext2D;
@@ -82,11 +82,16 @@ export function resolveMetrics(a: Activity, d: Design, units: Units): MetricValu
 export function resolveType(d: Design): TypeSet {
   const base = templateById(d.templateId).type;
   const choice = FONT_CHOICES.find((f) => f.id === d.font);
-  return choice ? { ...base, display: choice.spec, number: choice.spec } : base;
+  const t = choice ? { ...base, display: choice.spec, number: choice.spec } : base;
+  const w = d.fontWeight;
+  if (w === null) return t;
+  // Labels keep their weight. Only fonts that ship the chosen weight change.
+  const weigh = (f: FontSpec) => (supportsWeight(f, w) ? { ...f, weight: w } : f);
+  return { ...t, display: weigh(t.display), number: weigh(t.number) };
 }
 
 function setFont(c: Ctx, f: FontSpec, size: number) {
-  c.font = `${f.weight} ${size}px "${f.family}", system-ui, sans-serif`;
+  c.font = `${f.weight} ${size}px ${f.stack ?? `"${f.family}", system-ui, sans-serif`}`;
   c.letterSpacing = `${(f.track ?? 0) * size}px`;
 }
 
@@ -96,7 +101,7 @@ function withAlpha(hex: string, alpha: number) {
 }
 
 interface Px { x: number; y: number; w: number; h: number }
-interface Ctxt { c: Ctx; W: number; H: number; k: number; scene: Scene; type: TypeSet; ink: string; accent: string }
+interface Ctxt { c: Ctx; W: number; H: number; k: number; scene: Scene; type: TypeSet; ink: string; accent: string; halo?: string; pass?: 'halo' | 'fill' }
 
 const UNIT_RATIO = 0.42;
 
@@ -117,6 +122,21 @@ function fitValues(g: Ctxt, items: MetricValue[], maxW: number, maxSize: number)
   return size;
 }
 
+/**
+ * Outlines text in the background colour so it cuts out of the route behind it. Outlined layers draw in
+ * two passes, all outlines then all text, so one number's outline never erases a neighbouring label.
+ */
+function haloText(g: Ctxt, text: string, x: number, y: number, size: number) {
+  if (g.pass === 'halo') {
+    g.c.strokeStyle = g.halo!;
+    g.c.lineWidth = size * 0.22;
+    g.c.lineJoin = 'round';
+    g.c.strokeText(text, x, y);
+  } else {
+    g.c.fillText(text, x, y);
+  }
+}
+
 function drawValue(g: Ctxt, m: MetricValue, x: number, baseline: number, size: number, align: LayerOpts['align']) {
   const { c, type } = g;
   const w = valueWidth(g, m, size);
@@ -125,12 +145,12 @@ function drawValue(g: Ctxt, m: MetricValue, x: number, baseline: number, size: n
   c.textBaseline = 'alphabetic';
   c.fillStyle = g.ink;
   setFont(c, type.number, size);
-  c.fillText(m.value, at, baseline);
+  haloText(g, m.value, at, baseline, size);
   if (m.unit) {
     at += c.measureText(m.value).width + size * 0.12;
     setFont(c, type.label, size * UNIT_RATIO);
     c.fillStyle = withAlpha(g.ink, 0.72);
-    c.fillText(m.unit, at, baseline);
+    haloText(g, m.unit, at, baseline, size * UNIT_RATIO * 1.6);
   }
 }
 
@@ -140,7 +160,7 @@ function drawLabel(g: Ctxt, text: string, x: number, baseline: number, size: num
   c.textAlign = align ?? 'left';
   c.textBaseline = 'alphabetic';
   c.fillStyle = withAlpha(g.ink, 0.72);
-  c.fillText(type.upper ? text.toUpperCase() : text, x, baseline);
+  haloText(g, type.upper ? text.toUpperCase() : text, x, baseline, size * 1.6);
 }
 
 function statGrid(g: Ctxt, items: MetricValue[], p: Px, cols: number, align: LayerOpts['align']) {
@@ -157,6 +177,20 @@ function statGrid(g: Ctxt, items: MetricValue[], p: Px, cols: number, align: Lay
     const left = p.x + col * (cellW + gapX);
     const x = align === 'center' ? left + cellW / 2 : align === 'right' ? left + cellW : left;
     const top = p.y + row * cellH + (cellH - block) / 2;
+    drawLabel(g, m.label, x, top + labelSize, labelSize, align);
+    drawValue(g, m, x, top + block, size, align);
+  });
+}
+
+/** One metric per row, top to bottom, label above value. Every value shares one size. */
+function statStack(g: Ctxt, items: MetricValue[], p: Px, align: LayerOpts['align']) {
+  const rowH = p.h / items.length;
+  const size = fitValues(g, items, p.w, rowH * 0.62);
+  const labelSize = Math.min(Math.max(19, size * 0.24), 32, rowH * 0.2);
+  const block = labelSize * 1.45 + size * 0.86;
+  const x = align === 'center' ? p.x + p.w / 2 : align === 'right' ? p.x + p.w : p.x;
+  items.forEach((m, i) => {
+    const top = p.y + rowH * i + (rowH - block) / 2;
     drawLabel(g, m.label, x, top + labelSize, labelSize, align);
     drawValue(g, m, x, top + block, size, align);
   });
@@ -184,9 +218,10 @@ function drawStats(g: Ctxt, l: Layer, p: Px) {
   const variant = design.statsVariant === 'auto' ? l.opts.variant ?? 'row' : design.statsVariant;
   // "max" is how a template keeps its proportions. Choosing a layout by hand lifts it.
   if (l.opts.max && design.statsVariant === 'auto' && design.metrics === null) items = items.slice(0, l.opts.max);
-  const align = l.opts.align ?? 'left';
+  const align = design.statsAlign === 'auto' ? l.opts.align ?? 'left' : design.statsAlign;
 
   if (variant === 'column') return statColumn(g, items, p, l.opts.rules ?? true);
+  if (variant === 'stack') return statStack(g, items, p, align);
   if (variant === 'grid') return statGrid(g, items, p, items.length > 1 ? 2 : 1, align);
   if (variant === 'row') {
     const cols = items.length <= 4 ? items.length : Math.ceil(items.length / 2);
@@ -488,6 +523,13 @@ function drawFilm(g: Ctxt) {
   c.restore();
 }
 
+function haloColour(d: Design): string | undefined {
+  const bg = d.background;
+  if (bg.kind === 'transparent') return undefined;
+  if (bg.kind === 'photo') return 'rgba(0,0,0,0.55)';
+  return bg.color;
+}
+
 export function renderScene(c: Ctx, scene: Scene, k: number) {
   const { activity, design, photo } = scene;
   const size = sceneSize(design.aspect, photo);
@@ -516,7 +558,12 @@ export function renderScene(c: Ctx, scene: Scene, k: number) {
       case 'film': drawFilm(g); break;
       case 'rule': c.fillStyle = withAlpha(g.ink, 0.5); c.fillRect(p.x, p.y, p.w, 2); break;
       case 'route': drawRoute(g, p); break;
-      case 'stats': drawStats(g, l, p); break;
+      case 'stats': {
+        const halo = l.opts.halo ? haloColour(design) : undefined;
+        if (halo) drawStats({ ...g, halo, pass: 'halo' }, l, p);
+        drawStats(g, l, p);
+        break;
+      }
       case 'title': drawTitle(g, l, p); break;
       case 'chart': drawChart(g, l, p); break;
       case 'splits': drawSplits(g, p); break;

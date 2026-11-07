@@ -7,7 +7,7 @@ Everything runs in the browser. Files never leave your device, and there is no s
 ## Features
 
 - `.fit` upload by file picker or drag and drop, including several files at once. Uploads are kept in the browser between visits.
-- 12 templates in four collections, each with layouts for 9:16, 4:5, 1:1 and 16:9. Photos can also set the canvas shape.
+- 13 templates in four collections, each with layouts for 9:16, 4:5, 1:1 and 16:9. Photos can also set the canvas shape.
 - Backgrounds: photo (pan, zoom, darken, blur, black and white), solid, gradient, generated graphics, or none.
 - 17 data points to choose and reorder, including pace, power, normalized power, heart rate and cadence. km or miles.
 - Route map, time-series chart and split table. The route can be coloured by progress, elevation, speed, heart rate, power or cadence.

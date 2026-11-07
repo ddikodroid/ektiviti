@@ -11,6 +11,8 @@ export interface LayerOpts {
   series?: SeriesKey;
   chart?: 'area' | 'line' | 'ribbon';
   labels?: boolean;
+  /** Stats: outline the text in the background colour, for numbers set in front of the route. */
+  halo?: boolean;
   hole?: Rect;
   max?: number;
 }
@@ -152,6 +154,17 @@ export const TEMPLATES: Template[] = [
       ? [route([0.26, 0.05, 0.7, 0.9]), title([0.04, 0.08, 0.3, 0.2]), stats([0.04, 0.52, 0.22, 0.4], 'column', { max: 4 })]
       : [title([0.07, 0.04, 0.86, 0.11]), route([0.04, 0.16, 0.92, 0.62]), stats([0.07, 0.81, 0.86, 0.14], 'row', { max: 4 })],
   },
+  {
+    id: 'overprint', name: 'Overprint', collection: 'Loud',
+    type: { display: grotesk, number: anton, label: sans, upper: true },
+    ink: '#ffffff', accent: '#ff4f2e', background: { kind: 'solid', color: '#0b0d0c' },
+    route: { width: 2.4 },
+    layout: (s) => s === 'wide'
+      ? [route([0.04, 0.05, 0.92, 0.9]), title([0.04, 0.06, 0.4, 0.15]), stats([0.32, 0.12, 0.36, 0.8], 'stack', { align: 'center', halo: true, max: 3 })]
+      : s === 'square'
+        ? [route([0.0, 0.1, 1, 0.9], true), title([0.06, 0.04, 0.88, 0.1], 'center'), stats([0.22, 0.17, 0.56, 0.76], 'stack', { align: 'center', halo: true, max: 3 })]
+        : [route([0.0, 0.13, 1, 0.87], true), title([0.07, 0.04, 0.86, 0.1], 'center'), stats([0.14, 0.19, 0.72, 0.72], 'stack', { align: 'center', halo: true, max: 3 })],
+  },
 ];
 
 export const templateById = (id: string) => TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];
@@ -181,7 +194,9 @@ export function withTemplate(d: Design, id: string): Design {
     accent,
     paper: t.paper ?? d.paper,
     font: null,
+    fontWeight: null,
     statsVariant: 'auto',
+    statsAlign: 'auto',
     chartSeries: 'auto',
     route: { ...DEFAULT_ROUTE, rotate: d.route.rotate, ...t.route },
     background: keepPhoto ? d.background : { ...DEFAULT_BACKGROUND, ...t.background },
@@ -190,8 +205,8 @@ export function withTemplate(d: Design, id: string): Design {
 
 export function initialDesign(): Design {
   return withTemplate({
-    templateId: 'meridian', aspect: '4:5', ink: '#fff', accent: '#fff', paper: '#f5f2ea', font: null,
-    background: DEFAULT_BACKGROUND, metrics: null, statsVariant: 'auto', chartSeries: 'auto',
+    templateId: 'meridian', aspect: '4:5', ink: '#fff', accent: '#fff', paper: '#f5f2ea', font: null, fontWeight: null,
+    background: DEFAULT_BACKGROUND, metrics: null, statsVariant: 'auto', statsAlign: 'auto', chartSeries: 'auto',
     route: DEFAULT_ROUTE, title: null, subtitle: null, caption: '', layout: {},
   }, 'meridian');
 }
