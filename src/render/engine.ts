@@ -1,7 +1,7 @@
 import type { Activity, Aspect, Design, MetricId, Rect, SeriesKey, Split, Units } from '../types';
 import { defaultMetrics, distanceIn, formatDate, formatPace, metricValue, speedIn, SPORT_LABEL, type MetricValue } from '../lib/format';
 import { drawBackground } from './background';
-import { FONT_CHOICES, supportsWeight, type FontSpec } from './fonts';
+import { FAMILY_WEIGHTS, FONT_CHOICES, supportsWeight, type FontSpec } from './fonts';
 import { templateById, type LayerOpts, type LayerType, type Shape, type TypeSet } from './templates';
 
 type Ctx = CanvasRenderingContext2D;
@@ -182,17 +182,59 @@ function statGrid(g: Ctxt, items: MetricValue[], p: Px, cols: number, align: Lay
   });
 }
 
-/** One metric per row, top to bottom, label above value. Every value shares one size. */
+/** The boldest bundled weight of a font, for units set in the number face. */
+function boldOf(f: FontSpec): FontSpec {
+  const weights = FAMILY_WEIGHTS[f.family];
+  return weights ? { ...f, weight: Math.max(...weights) } : { ...f, weight: 700 };
+}
+
+/**
+ * One metric per row, top to bottom: the value, its unit in bold capitals, then the label, smaller,
+ * all on one baseline. Every row shares one size.
+ */
 function statStack(g: Ctxt, items: MetricValue[], p: Px, align: LayerOpts['align']) {
+  const { c, type } = g;
+  const UNIT = 0.36;
+  const LABEL = 0.2;
+  const unitFont = boldOf(type.number);
+  const label = (m: MetricValue) => (type.upper ? m.label.toUpperCase() : m.label);
+  // Smaller than the unit, but never below a readable size on a 1080px image.
+  const labelSize = (size: number) => Math.min(Math.max(size * LABEL, 17), size * UNIT * 0.85);
+  const parts = (m: MetricValue, size: number) => {
+    setFont(c, type.number, size);
+    const value = c.measureText(m.value).width;
+    setFont(c, unitFont, size * UNIT);
+    const unit = m.unit ? c.measureText(m.unit.toUpperCase()).width : 0;
+    setFont(c, type.label, labelSize(size));
+    const lab = c.measureText(label(m)).width;
+    const gapUnit = m.unit ? size * 0.1 : 0;
+    const gapLabel = size * 0.16;
+    return { value, unit, lab, gapUnit, gapLabel, total: value + gapUnit + unit + gapLabel + lab };
+  };
+
   const rowH = p.h / items.length;
-  const size = fitValues(g, items, p.w, rowH * 0.62);
-  const labelSize = Math.min(Math.max(19, size * 0.24), 32, rowH * 0.2);
-  const block = labelSize * 1.45 + size * 0.86;
-  const x = align === 'center' ? p.x + p.w / 2 : align === 'right' ? p.x + p.w : p.x;
+  let size = rowH * 0.78;
+  for (const m of items) size = Math.min(size, (size * p.w) / Math.max(1, parts(m, size).total));
+
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
   items.forEach((m, i) => {
-    const top = p.y + rowH * i + (rowH - block) / 2;
-    drawLabel(g, m.label, x, top + labelSize, labelSize, align);
-    drawValue(g, m, x, top + block, size, align);
+    const w = parts(m, size);
+    let x = align === 'center' ? p.x + (p.w - w.total) / 2 : align === 'right' ? p.x + p.w - w.total : p.x;
+    const baseline = p.y + rowH * i + rowH / 2 + size * 0.36;
+    setFont(c, type.number, size);
+    c.fillStyle = g.ink;
+    haloText(g, m.value, x, baseline, size);
+    x += w.value + w.gapUnit;
+    if (m.unit) {
+      setFont(c, unitFont, size * UNIT);
+      haloText(g, m.unit.toUpperCase(), x, baseline, size * UNIT * 1.6);
+      x += w.unit;
+    }
+    x += w.gapLabel;
+    setFont(c, type.label, labelSize(size));
+    c.fillStyle = withAlpha(g.ink, 0.72);
+    haloText(g, label(m), x, baseline, labelSize(size) * 1.8);
   });
 }
 
